@@ -1,0 +1,1678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WordRoll</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Fira Code -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        mono: ['"Fira Code"', 'monospace'],
+                    },
+                    colors: {
+                        cream: '#FAF9F6',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * {
+            font-family: 'Fira Code', monospace;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            background-color: #FAF9F6;
+            color: #0F172A;
+            overflow-x: hidden;
+            min-height: 100vh;
+        }
+        .interactive-btn {
+            transition: all 0.25s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+        .interactive-btn:hover:not(:disabled) {
+            opacity: 0.95;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+        .interactive-btn:active:not(:disabled) {
+            transform: scale(0.97) translateY(0);
+        }
+        
+        /* Quadratic Ease-Out Keyframe Animations */
+        @keyframes slideUpQuad {
+            0% {
+                opacity: 0;
+                transform: translateY(36px) scale(0.92);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+        @keyframes fadeUpQuad {
+            0% {
+                opacity: 0;
+                transform: translateY(16px);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .slot-letter-box {
+            display: inline-block;
+            opacity: 0;
+            animation: slideUpQuad 0.4s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+        }
+        .slide-up-quad {
+            opacity: 0;
+            animation: slideUpQuad 0.4s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+        }
+        
+        /* Smooth Slide-In from Top/Left for Definition & Meta */
+        @keyframes slideFromTopSide {
+            0% {
+                opacity: 0;
+                transform: translate(-18px, -14px);
+            }
+            100% {
+                opacity: 1;
+                transform: translate(0, 0);
+            }
+        }
+        .slide-from-top-side {
+            opacity: 0;
+            animation: slideFromTopSide 0.6s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+        }
+        
+        .slot-letter {
+            display: inline-block;
+            min-width: 0.65em;
+            text-align: center;
+            transition: color 0.15s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+        .slot-letter.spinning {
+            color: #6366F1;
+        }
+        .slot-letter.revealed {
+            color: #0F172A;
+        }
+        .trait-row {
+            opacity: 0;
+            animation: fadeUpQuad 0.3s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+        }
+        .fade-in-up {
+            animation: fadeUpQuad 0.35s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+        }
+        
+        /* Smooth auto-scroll container */
+        .traits-scroll-container {
+            max-height: 220px;
+            overflow-y: auto;
+            scroll-behavior: smooth;
+        }
+        .traits-scroll-container::-webkit-scrollbar {
+            width: 4px;
+        }
+        .traits-scroll-container::-webkit-scrollbar-thumb {
+            background: #CBD5E1;
+            border-radius: 4px;
+        }
+
+        /* Sidebar slide drawer animations */
+        .drawer-overlay {
+            transition: opacity 0.3s ease-in-out;
+        }
+        .drawer-panel {
+            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center p-4 md:p-8 min-h-screen selection:bg-indigo-100 selection:text-indigo-900 relative">
+
+    <!-- Top Navigation Overlay (Minimalist Links for History & Bookmarks) -->
+    <header id="top-nav" class="absolute top-4 right-4 md:top-6 md:right-6 flex items-center gap-3 text-xs font-mono text-slate-400 z-10 transition-opacity duration-300">
+        <button onclick="openModal('history')" class="hover:text-slate-800 transition-colors py-1 px-2 rounded">
+            history (<span id="history-count">0</span>)
+        </button>
+        <button onclick="openModal('bookmarks')" class="hover:text-slate-800 transition-colors py-1 px-2 rounded">
+            bookmarks (<span id="bookmarks-count">0</span>)
+        </button>
+    </header>
+
+    <main class="w-full max-w-xl mx-auto flex flex-col items-center justify-center min-h-[80vh]">
+
+        <!-- Initial Centered Action Button (Only element on initial view) -->
+        <div id="center-start-container" class="w-full flex flex-col items-center justify-center text-center space-y-3">
+            <button id="main-generate-btn" disabled onclick="startWordRoll()" class="interactive-btn py-4 px-8 border border-slate-300 hover:border-indigo-500 rounded-md text-slate-800 font-semibold text-sm md:text-base bg-white/60 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                <span id="gen-btn-label">Connecting to github...</span>
+            </button>
+            <div id="status-subtext" class="text-[11px] text-slate-400 font-mono tracking-wide">
+                This may take a few seconds!
+            </div>
+        </div>
+
+        <!-- Word Roll Stage (Hidden by default, shown upon clicking Roll) -->
+        <div id="roll-stage" class="hidden w-full space-y-6">
+
+            <!-- Shared Roll Notice Badge (Only visible when loaded from shared seed URL) -->
+            <div id="shared-roll-badge" class="hidden p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-center space-y-1">
+                <div class="text-xs font-mono text-indigo-700 font-semibold flex items-center justify-center gap-1.5">
+                    <span class="inline-block w-2 h-2 rounded-full bg-indigo-600 animate-pulse"></span>
+                    SHARED ROLL DISCOVERED
+                </div>
+                <div class="text-xs text-slate-600 font-sans">
+                    Rolled by <span id="shared-by-user" class="font-bold text-indigo-900 font-mono">@user</span>
+                    · Verified Code: <span id="shared-check-code" class="font-mono text-[11px] text-indigo-600 font-semibold">VALID</span>
+                </div>
+            </div>
+
+            <!-- Word Letter Slots Container -->
+            <div id="animated-word-container" class="text-3xl sm:text-5xl md:text-6xl font-extrabold tracking-tight font-mono text-center break-words text-slate-900 py-4 flex flex-wrap justify-center gap-1 sm:gap-2">
+                <!-- Letter slots injected dynamically -->
+            </div>
+
+            <!-- Clean Definition & Meta Section -->
+            <div id="word-meta-container" class="hidden space-y-2 text-left slide-from-top-side">
+                <div class="flex items-center gap-2 text-xs font-mono text-slate-400">
+                    <span id="word-pos" class="font-bold text-indigo-600 uppercase tracking-wider">noun</span>
+                    <span>·</span>
+                    <span id="word-syllables" class="text-slate-500">1 syllable</span>
+                    <span>·</span>
+                    <button id="bookmark-current-btn" onclick="toggleBookmarkCurrent()" class="text-slate-500 hover:text-slate-900 underline underline-offset-2">
+                        + bookmark
+                    </button>
+                </div>
+
+                <p id="word-definition" class="text-slate-800 text-sm sm:text-base leading-relaxed font-normal font-sans">
+                    <!-- Clean definition injected here -->
+                </p>
+            </div>
+
+            <!-- Auto-Scrolling Trait Breakdown List -->
+            <div id="rarity-breakdown-container" class="hidden space-y-2 pt-4 border-t border-slate-200/60 font-mono text-xs">
+                <div class="flex justify-between items-center text-slate-400 uppercase tracking-wider font-semibold text-[11px] pb-1">
+                    <span>Satisfied Traits</span>
+                    <span id="trait-count-badge" class="text-indigo-600">0 found</span>
+                </div>
+
+                <!-- Auto-scrolling List Container -->
+                <div id="traits-list" class="traits-scroll-container space-y-1.5 pr-1">
+                    <!-- Dynamic traits injected sequentially here -->
+                </div>
+
+                <!-- Total Score Bar with Ease-Sqr-Out Number Engine -->
+                <div id="total-score-box" class="hidden pt-4 border-t border-slate-200/80 flex items-baseline justify-between text-slate-900">
+                    <span class="font-semibold text-xs sm:text-sm tracking-wider uppercase">TOTAL RARITY SCORE</span>
+                    <span class="text-lg sm:text-2xl font-bold text-indigo-600 font-mono">
+                        1 in <span id="word-final-score">0</span>
+                    </span>
+                </div>
+            </div>
+
+            <!-- Re-Roll & Share Buttons at bottom after reveal completes -->
+            <div id="reroll-container" class="hidden pt-4 flex flex-wrap items-center justify-center gap-3">
+                <button id="reroll-btn" onclick="startWordRoll()" class="interactive-btn py-3 px-6 border border-slate-300 hover:border-indigo-500 rounded-md text-slate-800 font-semibold text-xs md:text-sm bg-white/60 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span id="reroll-btn-label">ROLL AGAIN</span>
+                </button>
+                <button onclick="openShareModal()" class="interactive-btn py-3 px-5 border border-indigo-200 hover:border-indigo-500 rounded-md text-indigo-600 font-semibold text-xs md:text-sm bg-indigo-50/60 shadow-sm transition-all flex items-center gap-1.5">
+                    <span>🔗</span> SHARE ROLL
+                </button>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- Slide-over / Modal for History & Bookmarks -->
+    <div id="list-modal" class="hidden fixed inset-0 z-50 overflow-hidden">
+        <div id="modal-backdrop" onclick="closeModal()" class="drawer-overlay fixed inset-0 bg-slate-900/30 backdrop-blur-sm opacity-0 transition-opacity"></div>
+        
+        <div class="fixed inset-y-0 right-0 max-w-full flex">
+            <!-- Modal Drawer Panel: Full screen on mobile (w-full), max-w-md on larger screens -->
+            <div id="modal-panel" class="drawer-panel w-screen sm:max-w-md bg-[#FAF9F6] h-full p-5 sm:p-6 shadow-2xl flex flex-col font-mono text-xs border-l border-slate-200 translate-x-full transition-transform">
+                <!-- Modal Header -->
+                <div class="flex items-center justify-between pb-4 border-b border-slate-200">
+                    <span id="modal-title" class="font-bold text-slate-900 uppercase tracking-wider">History</span>
+                    <div class="flex items-center gap-3">
+                        <button id="modal-clear-btn" onclick="handleClearClick()" class="text-rose-500 hover:text-rose-700 font-semibold transition-colors hidden">
+                            delete all
+                        </button>
+                        <button onclick="closeModal()" class="text-slate-500 hover:text-slate-900 font-bold text-sm">
+                            ✕ close
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Modal Scrollable Content List -->
+                <div id="modal-content-list" class="flex-1 overflow-y-auto py-4 space-y-3 pr-1">
+                    <!-- Dynamically populated -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Share Roll Modal -->
+    <div id="share-modal" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div class="bg-[#FAF9F6] border border-slate-200 rounded-xl p-6 w-full max-w-md shadow-2xl space-y-4 font-mono text-xs">
+            <div class="flex justify-between items-center pb-2 border-b border-slate-200">
+                <span class="font-bold text-slate-900 uppercase tracking-wider text-sm">Share Your Roll</span>
+                <button onclick="closeShareModal()" class="text-slate-400 hover:text-slate-800 font-bold text-base">✕</button>
+            </div>
+
+            <div class="space-y-2">
+                <label for="share-username-input" class="block text-slate-600 font-semibold">Your Username / Name:</label>
+                <input id="share-username-input" type="text" placeholder="e.g. WordMaster_99" maxlength="24" oninput="onUsernameInputChange()" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-md focus:outline-none focus:border-indigo-500 text-slate-900 font-mono">
+                <div id="username-error" class="text-[11px] text-rose-500 hidden">
+                    Must contain only English letters, numbers, hyphens (-) or underscores (_). No spaces.
+                </div>
+            </div>
+
+            <div class="space-y-2 pt-1">
+                <label class="block text-slate-600 font-semibold">Generated Seed Link:</label>
+                <div class="flex gap-2">
+                    <input id="share-link-output" readonly type="text" class="flex-1 px-3 py-2 bg-slate-100 border border-slate-200 rounded-md text-slate-600 text-[11px] font-mono overflow-x-auto">
+                    <button id="copy-link-btn" onclick="copyGeneratedShareLink()" class="interactive-btn px-4 py-2 bg-indigo-600 text-white font-semibold rounded-md hover:bg-indigo-700 transition-colors">
+                        Copy
+                    </button>
+                </div>
+                <div id="copy-status-msg" class="text-[11px] text-emerald-600 hidden">
+                    ✓ Link copied to clipboard!
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+
+        // ==========================================
+        // GAME CONFIGURATION
+        // ==========================================
+        const CONFIG = {
+            ROLL_COOLDOWN_MS: 5 * 60 * 60 * 1000, // 5 hours in milliseconds
+            BASE_TRAIT_DELAY_MS: 380,       // Base delay between trait reveals (ms)
+            STREAK_SPEEDUP_PERCENT: 3,      // Speedup percentage per streak step (e.g. 3%)
+            MAX_STREAK_SPEEDUP_PERCENT: 40  // Maximum speedup percentage cap (e.g. 40%)
+        };
+
+        // 5-Hour Cooldown Persistence Helper Functions
+        function getLastRollTimestamp() {
+            try {
+                const stored = localStorage.getItem('lexica_last_roll_timestamp_v1');
+                return stored ? parseInt(stored, 10) : 0;
+            } catch (e) {
+                return 0;
+            }
+        }
+
+        function setLastRollTimestamp(ts) {
+            try {
+                localStorage.setItem('lexica_last_roll_timestamp_v1', ts.toString());
+            } catch (e) {}
+        }
+
+        function getRemainingCooldownMs() {
+            const lastRoll = getLastRollTimestamp();
+            if (!lastRoll) return 0;
+            const elapsed = Date.now() - lastRoll;
+            return Math.max(0, CONFIG.ROLL_COOLDOWN_MS - elapsed);
+        }
+
+        function formatCooldownTime(ms) {
+            const totalSecs = Math.ceil(ms / 1000);
+            const hrs = Math.floor(totalSecs / 3600);
+            const mins = Math.floor((totalSecs % 3600) / 60);
+            const secs = totalSecs % 60;
+            const pad = (n) => String(n).padStart(2, '0');
+            if (hrs > 0) {
+                return `${hrs}h ${pad(mins)}m ${pad(secs)}s`;
+            }
+            return `${mins}m ${pad(secs)}s`;
+        }
+
+        let cooldownInterval = null;
+
+        function updateCooldownUI() {
+            const remaining = getRemainingCooldownMs();
+            const mainBtn = document.getElementById('main-generate-btn');
+            const mainLabel = document.getElementById('gen-btn-label');
+            const rerollBtn = document.getElementById('reroll-btn');
+            const rerollLabel = document.getElementById('reroll-btn-label');
+            const subtext = document.getElementById('status-subtext');
+
+            if (remaining > 0) {
+                const formatted = formatCooldownTime(remaining);
+                if (mainBtn) mainBtn.disabled = true;
+                if (mainLabel) mainLabel.textContent = `COOLDOWN: ${formatted}`;
+                if (rerollBtn) rerollBtn.disabled = true;
+                if (rerollLabel) rerollLabel.textContent = `NEXT ROLL IN ${formatted}`;
+                if (subtext && gameState.isLoaded && !gameState.isRolling) {
+                    subtext.textContent = `5-Hour Cooldown Active · Next roll available in ${formatted}`;
+                    subtext.className = "text-[11px] text-amber-600 font-mono tracking-wide font-medium";
+                }
+            } else {
+                if (mainBtn && gameState.isLoaded && !gameState.isRolling) mainBtn.disabled = false;
+                if (mainLabel && gameState.isLoaded && !gameState.isRolling) mainLabel.textContent = "ROLL";
+                if (rerollBtn && gameState.isLoaded && !gameState.isRolling) rerollBtn.disabled = false;
+                if (rerollLabel && gameState.isLoaded && !gameState.isRolling) rerollLabel.textContent = "ROLL AGAIN";
+                if (subtext && gameState.isLoaded && !gameState.isRolling) {
+                    subtext.textContent = `Indexed ${gameState.wordList.length.toLocaleString()} words · press space / click to roll`;
+                    subtext.className = "text-[11px] text-emerald-600 font-mono tracking-wide";
+                }
+            }
+        }
+
+        function startCooldownTicker() {
+            if (cooldownInterval) clearInterval(cooldownInterval);
+            updateCooldownUI();
+            cooldownInterval = setInterval(updateCooldownUI, 1000);
+        }
+
+        // Web Audio API Sound Synthesizer for Slot Machine Effects
+        class SlotSoundFX {
+            constructor() {
+                this.ctx = null;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    if (AudioContext) {
+                        this.ctx = new AudioContext();
+                    }
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            // Short slot click sound
+            playTick() {
+                if (!this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(220 + Math.random() * 80, this.ctx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(80, this.ctx.currentTime + 0.03);
+
+                    gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.03);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + 0.03);
+                } catch (e) {}
+            }
+
+            // Pop sound for trait streaks with pitch scaling
+            playPop(streak = 0) {
+                if (!this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+
+                    osc.type = 'sine';
+                    const pitchOffset = Math.min(streak, 15) * 30;
+                    osc.frequency.setValueAtTime(520 + pitchOffset, this.ctx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(200 + pitchOffset * 0.5, this.ctx.currentTime + 0.03);
+
+                    gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.03);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + 0.03);
+                } catch (e) {}
+            }
+
+            // Letter reveal snap sound
+            playReveal() {
+                if (!this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(520, this.ctx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(880, this.ctx.currentTime + 0.05);
+
+                    gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.05);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + 0.05);
+                } catch (e) {}
+            }
+
+            // Trait match chime
+            playTraitChime() {
+                if (!this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(660, this.ctx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(1320, this.ctx.currentTime + 0.08);
+
+                    gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.08);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + 0.08);
+                } catch (e) {}
+            }
+        }
+
+        const audioFX = new SlotSoundFX();
+
+        // PROFANITY BLOCKLIST & EXACT MATCH FILTER
+        const PROFANITY_BLOCKLIST = new Set([
+            '*****', '*****', '*****', '*****', '*****', '*****', '*****', '*****', '*****',
+            'dammit', 'damn', '*****', '*****', '*****', '*****', '*****', '*****', '*****',
+            '*****', '*****', 'wanker', 'bollocks', 'bugger', 'arse', 'prick', 'douche',
+            '*****', 'jackass', 'piss', '*****', '*****', 'dipshit'
+        ]);
+
+        function isCleanWord(word) {
+            if (!word || typeof word !== 'string') return false;
+            const clean = word.trim().toLowerCase();
+            if (clean.length < 1 || clean.length > 35) return false;
+            if (PROFANITY_BLOCKLIST.has(clean)) return false;
+            return true;
+        }
+
+        // EXPANDED RARITY DATA TABLE (1-in-X probabilities)
+        const RARITY_DATA = {
+            length: {
+                1: 3740, 2: 1020, 3: 103, 4: 27.8, 5: 16.0, 6: 10.1, 7: 8.14,
+                8: 6.91, 9: 6.92, 10: 8.03, 11: 10.6, 12: 14.7, 13: 23.1, 14: 41.1,
+                15: 77.2, 16: 163, 17: 335, 18: 797, 19: 1760, 20: 4300, 21: 6150,
+                22: 9560, 23: 17200, 24: 17200, 25: 17200, 26: 86000, 27: 86000,
+                30: 43000, 31: 86000, 35: 86000
+            },
+            startsWith: {
+                'a': 14.2, 'b': 20.3, 'c': 10.9, 'd': 17.0, 'e': 22.0, 'f': 26.5,
+                'g': 33.0, 'h': 27.2, 'i': 20.4, 'j': 137, 'k': 119, 'l': 32.9,
+                'm': 18.0, 'n': 51.6, 'o': 34.3, 'p': 11.0, 'q': 171, 'r': 22.1,
+                's': 8.92, 't': 18.7, 'u': 41.2, 'v': 58.4, 'w': 44.4, 'x': 705,
+                'y': 298, 'z': 340
+            },
+            endsWith: {
+                'a': 30.4, 'b': 382, 'c': 31.2, 'd': 16.6, 'e': 4.78, 'f': 272,
+                'g': 37.5, 'h': 43.5, 'i': 252, 'j': 21500, 'k': 69.4, 'l': 17.1,
+                'm': 29.2, 'n': 10.9, 'o': 97.8, 'p': 89.8, 'q': 86000, 'r': 12.2,
+                's': 10.6, 't': 12.0, 'u': 506, 'v': 43000, 'w': 188, 'x': 258,
+                'y': 8.97, 'z': 1760
+            },
+            startType: { vowel: 4.58, consonant: 1.28 },
+            endType: { vowel: 3.87, consonant: 1.35 },
+            sameStartEnd: 20.3,
+            consecutiveIdentical: {
+                2: 4.71, 3: 28700, 4: 86000, 5: 86000, 6: 86000
+            },
+            allUnique: 4.37,
+            vowelsCount: {
+                0: 797, 1: 18.9, 2: 4.88, 3: 3.45, 4: 4.00, 5: 7.24, 6: 19.8,
+                7: 91.8, 8: 610, 9: 3070, 10: 7170, 13: 43000, 14: 86000
+            },
+            consecutiveVowels: {
+                2: 2.85, 3: 55.6, 4: 2610
+            },
+            syllables: {
+                1: 13.0, 2: 3.62, 3: 3.11, 4: 4.51, 5: 11.8, 6: 61.9, 7: 494,
+                8: 3580, 9: 28700, 12: 43000
+            },
+            a1z26Sum: {
+                25: 1560, 50: 215, 100: 94.4, 200: 1590
+            },
+            a1z26Parity: {
+                odd: 112, even: 6620
+            },
+            missingVowel: {
+                'a': 2.36, 'e': 3.00, 'i': 2.29, 'o': 1.92, 'u': 1.40
+            },
+            containsLetter: {
+                'a': 1.74, 'b': 6.44, 'c': 3.01, 'd': 4.14, 'e': 1.50, 'f': 9.88,
+                'g': 5.62, 'h': 4.84, 'i': 1.78, 'j': 74.7, 'k': 17.5, 'l': 2.39,
+                'm': 4.09, 'n': 2.11, 'o': 2.08, 'p': 4.01, 'q': 58.0, 'r': 1.88,
+                's': 2.41, 't': 2.01, 'u': 3.52, 'v': 11.8, 'w': 15.7, 'x': 35.7,
+                'y': 5.65, 'z': 38.7
+            },
+            bigramRepetition: {
+                2: 10.4, 3: 1090
+            },
+            letterPairs: {
+                0: 4.37, 1: 2.94, 2: 3.84, 3: 8.26, 4: 26.2, 5: 102, 6: 541,
+                7: 5740, 8: 21500, 9: 17200, 10: 86000
+            },
+            letterTriples: {
+                0: 1.21, 1: 6.50, 2: 60.5, 3: 768, 4: 12300, 5: 43000, 6: 86000
+            },
+            mirrorSubstring: 3.72
+        };
+
+        function estimateSyllables(word) {
+            const clean = word.toLowerCase().replace(/[^a-z]/g, '');
+            if (!clean) return 1;
+            if (clean.length <= 3) return 1;
+            const matches = clean.match(/[aeiouy]{1,2}/g);
+            let count = matches ? matches.length : 1;
+            if (clean.endsWith('e') && !clean.endsWith('le') && !clean.endsWith('ee')) {
+                count--;
+            }
+            return Math.max(1, count);
+        }
+
+        function calculateWordRarityTraits(wordStr) {
+            const clean = wordStr.toLowerCase();
+            const lettersOnly = clean.replace(/[^a-z]/g, '');
+            const traits = [];
+
+            if (lettersOnly.length === 0) return traits;
+
+            // 1. Word Length
+            const len = lettersOnly.length;
+            if (RARITY_DATA.length[len]) {
+                traits.push({
+                    name: `Length (${len} letters)`,
+                    rarityX: RARITY_DATA.length[len]
+                });
+            }
+
+            // 2. Starting With
+            const startChar = lettersOnly[0];
+            if (RARITY_DATA.startsWith[startChar]) {
+                traits.push({
+                    name: `Starts with '${startChar.toUpperCase()}'`,
+                    rarityX: RARITY_DATA.startsWith[startChar]
+                });
+            }
+
+            // 3. Ending With
+            const endChar = lettersOnly[lettersOnly.length - 1];
+            if (RARITY_DATA.endsWith[endChar]) {
+                traits.push({
+                    name: `Ends with '${endChar.toUpperCase()}'`,
+                    rarityX: RARITY_DATA.endsWith[endChar]
+                });
+            }
+
+            // 4. Start Type & End Type
+            const isVowel = (c) => 'aeiou'.includes(c);
+            const startIsVowel = isVowel(startChar);
+            traits.push({
+                name: `Start type: ${startIsVowel ? 'Vowel' : 'Consonant'}`,
+                rarityX: startIsVowel ? RARITY_DATA.startType.vowel : RARITY_DATA.startType.consonant
+            });
+
+            const endIsVowel = isVowel(endChar);
+            traits.push({
+                name: `End type: ${endIsVowel ? 'Vowel' : 'Consonant'}`,
+                rarityX: endIsVowel ? RARITY_DATA.endType.vowel : RARITY_DATA.endType.consonant
+            });
+
+            // 5. Start / End Same Letter
+            if (startChar === endChar && lettersOnly.length > 1) {
+                traits.push({
+                    name: `Starts & ends with '${startChar.toUpperCase()}'`,
+                    rarityX: RARITY_DATA.sameStartEnd
+                });
+            }
+
+            // 6. Consecutive Identical Letters
+            let maxRun = 1;
+            let currentRun = 1;
+            for (let i = 1; i < lettersOnly.length; i++) {
+                if (lettersOnly[i] === lettersOnly[i - 1]) {
+                    currentRun++;
+                    if (currentRun > maxRun) maxRun = currentRun;
+                } else {
+                    currentRun = 1;
+                }
+            }
+            if (maxRun >= 2 && RARITY_DATA.consecutiveIdentical[maxRun]) {
+                traits.push({
+                    name: `Consecutive identical letters (${maxRun} in a row)`,
+                    rarityX: RARITY_DATA.consecutiveIdentical[maxRun]
+                });
+            }
+
+            // 7. Uniqueness
+            const uniqueSet = new Set(lettersOnly);
+            if (uniqueSet.size === lettersOnly.length) {
+                traits.push({
+                    name: `All letters unique (${lettersOnly.length}/${lettersOnly.length})`,
+                    rarityX: RARITY_DATA.allUnique
+                });
+            }
+
+            // 8. Vowels Count
+            const vowels = lettersOnly.match(/[aeiou]/g) || [];
+            const vCount = vowels.length;
+            if (RARITY_DATA.vowelsCount[vCount] !== undefined) {
+                traits.push({
+                    name: `Vowel count (${vCount} vowel${vCount === 1 ? '' : 's'})`,
+                    rarityX: RARITY_DATA.vowelsCount[vCount]
+                });
+            }
+
+            // 9. Consecutive Vowels
+            let maxVowelRun = 0;
+            let curVowelRun = 0;
+            for (let i = 0; i < lettersOnly.length; i++) {
+                if (isVowel(lettersOnly[i])) {
+                    curVowelRun++;
+                    if (curVowelRun > maxVowelRun) maxVowelRun = curVowelRun;
+                } else {
+                    curVowelRun = 0;
+                }
+            }
+            if (maxVowelRun >= 2 && RARITY_DATA.consecutiveVowels[maxVowelRun]) {
+                traits.push({
+                    name: `Consecutive vowels (${maxVowelRun} in a row)`,
+                    rarityX: RARITY_DATA.consecutiveVowels[maxVowelRun]
+                });
+            }
+
+            // 10. Syllables
+            const sylCount = estimateSyllables(wordStr);
+            if (RARITY_DATA.syllables[sylCount]) {
+                traits.push({
+                    name: `Syllables count (${sylCount})`,
+                    rarityX: RARITY_DATA.syllables[sylCount]
+                });
+            }
+
+            // 11. Missing Vowels
+            ['a', 'e', 'i', 'o', 'u'].forEach(v => {
+                if (!lettersOnly.includes(v)) {
+                    traits.push({
+                        name: `Missing vowel '${v.toUpperCase()}'`,
+                        rarityX: RARITY_DATA.missingVowel[v]
+                    });
+                }
+            });
+
+            // 12. Contains Letters
+            'abcdefghijklmnopqrstuvwxyz'.split('').forEach(char => {
+                if (lettersOnly.includes(char) && RARITY_DATA.containsLetter[char]) {
+                    traits.push({
+                        name: `Contains letter '${char.toUpperCase()}'`,
+                        rarityX: RARITY_DATA.containsLetter[char]
+                    });
+                }
+            });
+
+            // 13. A1Z26 Metrics
+            let sumA1Z26 = 0;
+            let allOdd = true;
+            let allEven = true;
+            for (let i = 0; i < lettersOnly.length; i++) {
+                const val = lettersOnly.charCodeAt(i) - 96;
+                sumA1Z26 += val;
+                if (val % 2 === 0) allOdd = false;
+                else allEven = false;
+            }
+
+            if (RARITY_DATA.a1z26Sum[sumA1Z26]) {
+                traits.push({
+                    name: `A1Z26 Sum = ${sumA1Z26}`,
+                    rarityX: RARITY_DATA.a1z26Sum[sumA1Z26]
+                });
+            }
+
+            if (allOdd && lettersOnly.length > 1) {
+                traits.push({
+                    name: `A1Z26 parity: All letters odd`,
+                    rarityX: RARITY_DATA.a1z26Parity.odd
+                });
+            } else if (allEven && lettersOnly.length > 1) {
+                traits.push({
+                    name: `A1Z26 parity: All letters even`,
+                    rarityX: RARITY_DATA.a1z26Parity.even
+                });
+            }
+
+            // 14. Bigram Repetition
+            const bigramCounts = {};
+            for (let i = 0; i < lettersOnly.length - 1; i++) {
+                const bg = lettersOnly.substring(i, i + 2);
+                bigramCounts[bg] = (bigramCounts[bg] || 0) + 1;
+            }
+            let maxBigram = 0;
+            Object.values(bigramCounts).forEach(c => { if (c > maxBigram) maxBigram = c; });
+            if (maxBigram >= 2 && RARITY_DATA.bigramRepetition[maxBigram]) {
+                traits.push({
+                    name: `2-letter substring appears ${maxBigram}x`,
+                    rarityX: RARITY_DATA.bigramRepetition[maxBigram]
+                });
+            }
+
+            // 15. Letter Pairs & Triples
+            const letterFreqs = {};
+            for (let i = 0; i < lettersOnly.length; i++) {
+                const ch = lettersOnly[i];
+                letterFreqs[ch] = (letterFreqs[ch] || 0) + 1;
+            }
+            let pairs = 0;
+            let triples = 0;
+            Object.values(letterFreqs).forEach(count => {
+                if (count >= 2) pairs++;
+                if (count >= 3) triples++;
+            });
+
+            if (RARITY_DATA.letterPairs[pairs]) {
+                traits.push({
+                    name: `Letter pairs count: ${pairs}`,
+                    rarityX: RARITY_DATA.letterPairs[pairs]
+                });
+            }
+
+            if (triples > 0 && RARITY_DATA.letterTriples[triples]) {
+                traits.push({
+                    name: `Letter triples count: ${triples}`,
+                    rarityX: RARITY_DATA.letterTriples[triples]
+                });
+            }
+
+            // 16. Mirror / Palindrome Substring
+            let hasMirror = false;
+            for (let i = 0; i < lettersOnly.length - 2; i++) {
+                if (lettersOnly[i] === lettersOnly[i + 2]) { hasMirror = true; break; }
+                if (i < lettersOnly.length - 3 && lettersOnly[i] === lettersOnly[i + 3] && lettersOnly[i + 1] === lettersOnly[i + 2]) { hasMirror = true; break; }
+            }
+            if (hasMirror) {
+                traits.push({
+                    name: `Mirror / Palindrome substring (aba / abba)`,
+                    rarityX: RARITY_DATA.mirrorSubstring
+                });
+            }
+
+            return traits;
+        }
+
+        class EaseSqrOutNumberAnimator {
+            constructor(elementId) {
+                this.elementId = elementId;
+                this.currentVal = 0;
+                this.targetVal = 0;
+                this.startVal = 0;
+                this.startTime = null;
+                this.duration = 800;
+                this.animFrameReq = null;
+            }
+
+            reset() {
+                if (this.animFrameReq) {
+                    cancelAnimationFrame(this.animFrameReq);
+                    this.animFrameReq = null;
+                }
+                this.currentVal = 0;
+                this.targetVal = 0;
+                this.startVal = 0;
+                const el = document.getElementById(this.elementId);
+                if (el) el.textContent = '0';
+            }
+
+            static easeQuadOut(t) {
+                return 1 - (1 - t) * (1 - t);
+            }
+
+            animateTo(newTargetValue, duration = 800) {
+                this.element = document.getElementById(this.elementId);
+                if (!this.element) return;
+
+                this.startVal = this.currentVal;
+                this.targetVal = newTargetValue;
+                this.duration = duration;
+                this.startTime = null;
+
+                if (this.animFrameReq) {
+                    cancelAnimationFrame(this.animFrameReq);
+                }
+
+                const step = (timestamp) => {
+                    if (!this.startTime) this.startTime = timestamp;
+                    const elapsed = timestamp - this.startTime;
+                    const progress = Math.min(elapsed / this.duration, 1);
+                    const easedProgress = EaseSqrOutNumberAnimator.easeQuadOut(progress);
+                    
+                    this.currentVal = Math.round(this.startVal + (this.targetVal - this.startVal) * easedProgress);
+                    this.element.textContent = this.currentVal.toLocaleString();
+
+                    if (progress < 1) {
+                        this.animFrameReq = requestAnimationFrame(step);
+                    } else {
+                        this.currentVal = this.targetVal;
+                        this.element.textContent = this.targetVal.toLocaleString();
+                        this.animFrameReq = null;
+                    }
+                };
+
+                this.animFrameReq = requestAnimationFrame(step);
+            }
+        }
+
+        const gameState = {
+            wordList: [],
+            isLoaded: false,
+            isRolling: false,
+            bookmarks: [],
+            history: [],
+            currentRoll: null
+        };
+
+        const scoreAnimator = new EaseSqrOutNumberAnimator('word-final-score');
+
+        window.onload = function() {
+            loadStorageData();
+            updateCountsUI();
+            startCooldownTicker();
+
+            window.addEventListener('keydown', (e) => {
+                if (e.code === 'Space' && gameState.isLoaded && !gameState.isRolling) {
+                    if (document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'BUTTON') {
+                        e.preventDefault();
+                        if (getRemainingCooldownMs() <= 0) {
+                            startWordRoll();
+                        }
+                    }
+                }
+            });
+
+            preloadGitHubDictionary();
+        };
+
+        const GITHUB_DICT_URLS = [
+            'https://cdn.jsdelivr.net/gh/adambom/dictionary@master/dictionary.json',
+            'https://raw.githubusercontent.com/adambom/dictionary/master/dictionary.json'
+        ];
+
+        async function preloadGitHubDictionary() {
+            const genBtnLabel = document.getElementById('gen-btn-label');
+            const genBtn = document.getElementById('main-generate-btn');
+            const subtext = document.getElementById('status-subtext');
+
+            let rawData = null;
+            for (let url of GITHUB_DICT_URLS) {
+                try {
+                    if (genBtnLabel) genBtnLabel.textContent = "Connecting to Webster Repository...";
+                    const response = await fetch(url);
+                    if (response.ok) {
+                        rawData = await response.json();
+                        break;
+                    }
+                } catch (e) {
+                    console.warn(`Fetch failed for ${url}`, e);
+                }
+            }
+
+            if (!rawData) {
+                if (genBtnLabel) genBtnLabel.textContent = "Error Loading Data";
+                if (subtext) {
+                    subtext.textContent = "Failed to load dictionary from GitHub. Please refresh.";
+                    subtext.className = "text-[11px] text-rose-500 font-mono tracking-wide";
+                }
+                return;
+            }
+
+            const entries = Object.entries(rawData);
+            const cleanList = [];
+
+            for (let i = 0; i < entries.length; i++) {
+                const [wordKey, defVal] = entries[i];
+                const cleanWord = wordKey.trim();
+
+                if (isCleanWord(cleanWord)) {
+                    cleanList.push({
+                        word: cleanWord,
+                        definition: parseCleanDefinition(defVal),
+                        pos: parsePos(defVal)
+                    });
+                }
+            }
+
+            gameState.wordList = cleanList;
+            gameState.isLoaded = true;
+
+            updateCooldownUI();
+
+            // Check if user visited via a shared seed link
+            checkAndLoadSharedSeed();
+        }
+
+        function parseCleanDefinition(defStr) {
+            if (!defStr) return 'Definition unavailable in Webster entry.';
+            let cleaned = defStr.replace(/^(n\.|v\.|adj\.|adv\.|a\.|prep\.|conj\.|interj\.)\s*/i, '').trim();
+            
+            cleaned = cleaned.split(/;\s*as,\s*["“]/i)[0];
+            cleaned = cleaned.split(/\s*--\s*/)[0];
+            cleaned = cleaned.replace(/["“”]/g, '');
+            
+            if (cleaned.length > 0) {
+                cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+                if (!/[.!?]$/.test(cleaned)) cleaned += '.';
+            }
+            return cleaned;
+        }
+
+        function parsePos(defStr) {
+            if (!defStr) return 'noun';
+            const match = defStr.match(/^(n\.|v\.|adj\.|adv\.|a\.|prep\.|conj\.|interj\.)\s*/i);
+            if (match) {
+                const tag = match[1].toLowerCase();
+                if (tag.startsWith('v')) return 'verb';
+                if (tag.startsWith('adj') || tag === 'a.') return 'adjective';
+                if (tag.startsWith('adv')) return 'adverb';
+            }
+            return 'noun';
+        }
+
+        async function startWordRoll() {
+            if (!gameState.isLoaded || gameState.isRolling || gameState.wordList.length === 0) return;
+
+            // Enforce 5-Hour Cooldown Rule
+            if (getRemainingCooldownMs() > 0) {
+                updateCooldownUI();
+                return;
+            }
+
+            // Save roll timestamp immediately so cooldown is recorded for this roll
+            setLastRollTimestamp(Date.now());
+            updateCooldownUI();
+
+            audioFX.init();
+            gameState.isRolling = true;
+
+            // Hide header nav during word roll cutscene
+            document.getElementById('top-nav').classList.add('hidden');
+
+            // Hide initial center start screen, show roll stage
+            document.getElementById('center-start-container').classList.add('hidden');
+            document.getElementById('reroll-container').classList.add('hidden');
+            
+            const stage = document.getElementById('roll-stage');
+            const wordContainer = document.getElementById('animated-word-container');
+            const metaContainer = document.getElementById('word-meta-container');
+            const breakdownContainer = document.getElementById('rarity-breakdown-container');
+            const traitsList = document.getElementById('traits-list');
+            const totalScoreBox = document.getElementById('total-score-box');
+
+            stage.classList.remove('hidden');
+            metaContainer.classList.add('hidden');
+            breakdownContainer.classList.add('hidden');
+            totalScoreBox.classList.add('hidden');
+            traitsList.innerHTML = '';
+            wordContainer.innerHTML = '';
+
+            scoreAnimator.reset();
+
+            const randomIndex = Math.floor(Math.random() * gameState.wordList.length);
+            const chosen = gameState.wordList[randomIndex];
+            
+            const traits = calculateWordRarityTraits(chosen.word);
+            traits.sort((a, b) => a.rarityX - b.rarityX);
+
+            let totalRarityScore = 0;
+            traits.forEach(t => totalRarityScore += t.rarityX);
+            totalRarityScore = Math.round(totalRarityScore * 10) / 10;
+
+            gameState.currentRoll = {
+                word: chosen.word,
+                definition: chosen.definition,
+                pos: chosen.pos,
+                traits: traits,
+                score: totalRarityScore
+            };
+
+            updateBookmarkBtnState();
+
+            const letters = chosen.word.split('');
+            const slotElements = [];
+
+            for (let i = 0; i < letters.length; i++) {
+                const char = letters[i];
+                const box = document.createElement('span');
+                box.className = 'slot-letter-box';
+                box.style.animationDelay = `${i * 60}ms`;
+
+                const span = document.createElement('span');
+                span.className = 'slot-letter';
+
+                if (!/[a-zA-Z]/.test(char)) {
+                    span.textContent = char;
+                    span.classList.add('revealed');
+                } else {
+                    span.textContent = '?';
+                    span.classList.add('spinning');
+                }
+
+                box.appendChild(span);
+                wordContainer.appendChild(box);
+
+                slotElements.push({ char, elem: span, isAlphabet: /[a-zA-Z]/.test(char) });
+                audioFX.playTick();
+                await new Promise(r => setTimeout(r, 45));
+            }
+
+            for (let i = 0; i < slotElements.length; i++) {
+                const slot = slotElements[i];
+                if (!slot.isAlphabet) continue;
+
+                const targetChar = slot.char;
+                const isUpper = targetChar === targetChar.toUpperCase();
+                const alphabet = "abcdefghijklmnopqrstuvwxyz";
+                
+                let currentAlphaIdx = Math.floor(Math.random() * 26);
+                const totalSpins = 8 + (i * 4) + Math.floor(Math.random() * 3);
+
+                for (let spin = 0; spin < totalSpins; spin++) {
+                    const spinProgress = spin / (totalSpins - 1);
+                    const delay = 35 + spinProgress * 25;
+                    
+                    await new Promise(r => setTimeout(r, delay));
+
+                    currentAlphaIdx = (currentAlphaIdx + 1) % 26;
+                    let currentChar = (spin === totalSpins - 1) ? targetChar.toLowerCase() : alphabet[currentAlphaIdx];
+                    if (isUpper) currentChar = currentChar.toUpperCase();
+
+                    slot.elem.textContent = currentChar;
+                    audioFX.playTick();
+                }
+
+                slot.elem.textContent = targetChar;
+                slot.elem.classList.remove('spinning');
+                slot.elem.classList.add('revealed');
+                audioFX.playReveal();
+            }
+
+            await new Promise(r => setTimeout(r, 150));
+            document.getElementById('word-pos').textContent = chosen.pos;
+            const syls = estimateSyllables(chosen.word);
+            document.getElementById('word-syllables').textContent = `${syls} syllable${syls === 1 ? '' : 's'}`;
+            document.getElementById('word-definition').textContent = chosen.definition;
+            
+            metaContainer.classList.remove('hidden');
+            metaContainer.classList.remove('slide-from-top-side');
+            void metaContainer.offsetWidth; // Force CSS reflow
+            metaContainer.classList.add('slide-from-top-side');
+
+            await new Promise(r => setTimeout(r, 650));
+
+            breakdownContainer.classList.remove('hidden');
+            totalScoreBox.classList.remove('hidden');
+            document.getElementById('trait-count-badge').textContent = `${traits.length} satisfied`;
+
+            let runningTotalScore = 0;
+            let streak = 0;
+
+            for (let i = 0; i < traits.length; i++) {
+                const trait = traits[i];
+                streak++;
+                
+                const magnitudeMultiplier = Math.max(1, Math.pow(2, Math.log10(trait.rarityX / 10)));
+                const rawDelayMs = Math.round(CONFIG.BASE_TRAIT_DELAY_MS * magnitudeMultiplier);
+
+                const speedupPercent = Math.min(
+                    CONFIG.MAX_STREAK_SPEEDUP_PERCENT,
+                    streak * CONFIG.STREAK_SPEEDUP_PERCENT
+                ) / 100;
+
+                const delayMs = Math.max(60, Math.round(rawDelayMs * (1 - speedupPercent)));
+
+                await new Promise(r => setTimeout(r, delayMs));
+
+                const traitRow = document.createElement('div');
+                traitRow.className = 'trait-row flex justify-between items-center text-slate-700 py-1 border-b border-slate-200/40 text-xs font-mono';
+                traitRow.innerHTML = `
+                    <span>${trait.name}</span>
+                    <span class="font-bold text-indigo-600 font-mono">+${trait.rarityX}</span>
+                `;
+                traitsList.appendChild(traitRow);
+                audioFX.playPop(streak);
+
+                runningTotalScore += trait.rarityX;
+                const currentRoundedScore = Math.round(runningTotalScore * 10) / 10;
+                scoreAnimator.animateTo(currentRoundedScore, Math.min(delayMs, 500));
+
+                if (traitsList.scrollHeight > traitsList.clientHeight) {
+                    traitsList.scrollTo({
+                        top: traitsList.scrollHeight - traitsList.clientHeight,
+                        behavior: 'smooth'
+                    });
+                }
+            }
+
+            await new Promise(r => setTimeout(r, 200));
+            scoreAnimator.animateTo(totalRarityScore, 400);
+
+            // Record to History
+            gameState.history.unshift({
+                ...gameState.currentRoll,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
+            saveHistoryData();
+            updateCountsUI();
+
+            document.getElementById('top-nav').classList.remove('hidden');
+            await new Promise(r => setTimeout(r, 400));
+            document.getElementById('reroll-container').classList.remove('hidden');
+
+            gameState.isRolling = false;
+            updateCooldownUI();
+        }
+
+        let activeModalType = null;
+        let clearConfirmState = false;
+        let clearConfirmTimeout = null;
+
+        function generateCheckCode(word, username) {
+            let hash = 0;
+            const str = (word + username + "LEXICA_KEY_2026").toLowerCase();
+            for (let i = 0; i < str.length; i++) {
+                hash = ((hash << 5) - hash) + str.charCodeAt(i);
+                hash |= 0;
+            }
+            const baseLetters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+            let code = "";
+            let absHash = Math.abs(hash);
+            for (let i = 0; i < 4; i++) {
+                code += baseLetters[absHash % 26];
+                absHash = Math.floor(absHash / 26);
+            }
+            return code;
+        }
+
+        function encodeSeedPayload(word, username) {
+            const checkCode = generateCheckCode(word, username);
+            const rawPayload = JSON.stringify({ w: word, u: username, c: checkCode });
+            return btoa(encodeURIComponent(rawPayload));
+        }
+
+        function decodeSeedPayload(seedStr) {
+            try {
+                const rawPayload = decodeURIComponent(atob(seedStr));
+                const parsed = JSON.parse(rawPayload);
+                if (!parsed || !parsed.w || !parsed.u || !parsed.c) return null;
+                
+                const expectedCheck = generateCheckCode(parsed.w, parsed.u);
+                if (parsed.c !== expectedCheck) return null;
+
+                return {
+                    word: parsed.w,
+                    username: parsed.u,
+                    checkCode: parsed.c
+                };
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function isValidUsername(name) {
+            return /^[a-zA-Z0-9_-]+$/.test(name);
+        }
+
+        function openShareModal() {
+            if (!gameState.currentRoll) return;
+            const modal = document.getElementById('share-modal');
+            const input = document.getElementById('share-username-input');
+            const statusMsg = document.getElementById('copy-status-msg');
+            statusMsg.classList.add('hidden');
+
+            const savedName = localStorage.getItem('lexica_saved_username') || '';
+            input.value = savedName;
+            
+            modal.classList.remove('hidden');
+            updateShareLinkOutput();
+        }
+
+        function closeShareModal() {
+            document.getElementById('share-modal').classList.add('hidden');
+        }
+
+        function onUsernameInputChange() {
+            updateShareLinkOutput();
+        }
+
+        function updateShareLinkOutput() {
+            const input = document.getElementById('share-username-input');
+            const err = document.getElementById('username-error');
+            const linkInput = document.getElementById('share-link-output');
+            const copyBtn = document.getElementById('copy-link-btn');
+
+            const val = input.value.trim();
+
+            if (val.length === 0 || !isValidUsername(val)) {
+                err.classList.remove('hidden');
+                linkInput.value = '';
+                copyBtn.disabled = true;
+                copyBtn.classList.add('opacity-50');
+                return;
+            }
+
+            err.classList.add('hidden');
+            copyBtn.disabled = false;
+            copyBtn.classList.remove('opacity-50');
+
+            localStorage.setItem('lexica_saved_username', val);
+
+            const seed = encodeSeedPayload(gameState.currentRoll.word, val);
+            const baseUrl = window.location.origin + window.location.pathname;
+            linkInput.value = `${baseUrl}?seed=${seed}`;
+        }
+
+        function copyGeneratedShareLink() {
+            const linkInput = document.getElementById('share-link-output');
+            if (!linkInput.value) return;
+
+            linkInput.select();
+            document.execCommand('copy');
+
+            const statusMsg = document.getElementById('copy-status-msg');
+            statusMsg.classList.remove('hidden');
+        }
+
+        function openModal(type) {
+            activeModalType = type;
+            resetClearConfirmState();
+
+            const modal = document.getElementById('list-modal');
+            const backdrop = document.getElementById('modal-backdrop');
+            const panel = document.getElementById('modal-panel');
+            const title = document.getElementById('modal-title');
+            const clearBtn = document.getElementById('modal-clear-btn');
+            
+            title.textContent = type === 'history' ? 'Roll History' : 'Saved Bookmarks';
+            clearBtn.classList.toggle('hidden', type !== 'history');
+            
+            renderModalItems();
+
+            modal.classList.remove('hidden');
+            requestAnimationFrame(() => {
+                backdrop.classList.remove('opacity-0');
+                panel.classList.remove('translate-x-full');
+            });
+        }
+
+        function closeModal() {
+            resetClearConfirmState();
+            const modal = document.getElementById('list-modal');
+            const backdrop = document.getElementById('modal-backdrop');
+            const panel = document.getElementById('modal-panel');
+
+            backdrop.classList.add('opacity-0');
+            panel.classList.add('translate-x-full');
+
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                activeModalType = null;
+            }, 300);
+        }
+
+        function resetClearConfirmState() {
+            clearConfirmState = false;
+            if (clearConfirmTimeout) clearTimeout(clearConfirmTimeout);
+            const clearBtn = document.getElementById('modal-clear-btn');
+            if (clearBtn) {
+                clearBtn.textContent = 'clear';
+                clearBtn.className = 'text-rose-500 hover:text-rose-700 font-semibold transition-colors hidden';
+            }
+        }
+
+        function handleClearClick() {
+            const clearBtn = document.getElementById('modal-clear-btn');
+            if (!clearConfirmState) {
+                clearConfirmState = true;
+                clearBtn.textContent = 'click again to confirm';
+                clearBtn.className = 'text-rose-600 font-bold underline transition-colors';
+                clearConfirmTimeout = setTimeout(() => {
+                    resetClearConfirmState();
+                    if (activeModalType === 'history') {
+                        clearBtn.classList.remove('hidden');
+                    }
+                }, 3500);
+            } else {
+                resetClearConfirmState();
+                clearCurrentModalList();
+            }
+        }
+
+        // Comprehensive render function allowing bookmark/unbookmark in history & bookmark sections
+        function renderModalItems() {
+            const container = document.getElementById('modal-content-list');
+            container.innerHTML = '';
+            
+            const list = activeModalType === 'history' ? gameState.history : gameState.bookmarks;
+
+            if (list.length === 0) {
+                container.innerHTML = `<div class="text-slate-400 italic text-center py-8">No ${activeModalType} recorded yet.</div>`;
+                return;
+            }
+
+            list.forEach((item, index) => {
+                const isBookmarked = gameState.bookmarks.some(b => b.word.toLowerCase() === item.word.toLowerCase());
+
+                const card = document.createElement('div');
+                card.className = 'p-3.5 bg-white/80 border border-slate-200 rounded-lg space-y-1.5 relative group shadow-sm';
+                card.innerHTML = `
+                    <div class="flex items-baseline justify-between font-bold">
+                        <span class="text-slate-900 text-sm tracking-wide font-mono">${item.word}</span>
+                        <span class="text-indigo-600 font-mono text-xs">1 in ${item.score}</span>
+                    </div>
+                    <div class="text-[11px] text-slate-600 font-sans leading-snug">${item.definition}</div>
+                    <div class="flex justify-between items-center text-[10px] text-slate-400 pt-1.5 border-t border-slate-100 font-mono">
+                        <div class="flex items-center gap-2">
+                            <span class="uppercase font-semibold text-indigo-500">${item.pos}</span>
+                            <span>·</span>
+                            <button onclick="toggleModalBookmark('${item.word.replace(/'/g, "\\'")}', ${index})" class="${isBookmarked ? 'text-amber-600 font-bold' : 'text-slate-400 hover:text-slate-700'} underline underline-offset-2">
+                                ${isBookmarked ? '★ bookmarked' : '☆ bookmark'}
+                            </button>
+                        </div>
+                        <button onclick="removeModalItem(${index})" class="text-rose-400 hover:text-rose-600 font-medium">
+                            delete
+                        </button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function toggleModalBookmark(wordStr, index) {
+            const sourceList = activeModalType === 'history' ? gameState.history : gameState.bookmarks;
+            const item = sourceList.find(w => w.word.toLowerCase() === wordStr.toLowerCase());
+            if (!item) return;
+
+            const existingIdx = gameState.bookmarks.findIndex(b => b.word.toLowerCase() === item.word.toLowerCase());
+            if (existingIdx >= 0) {
+                gameState.bookmarks.splice(existingIdx, 1);
+            } else {
+                gameState.bookmarks.unshift(item);
+            }
+            saveBookmarksData();
+            updateBookmarkBtnState();
+            updateCountsUI();
+            renderModalItems();
+        }
+
+        function removeModalItem(index) {
+            if (activeModalType === 'history') {
+                gameState.history.splice(index, 1);
+                saveHistoryData();
+            } else {
+                gameState.bookmarks.splice(index, 1);
+                saveBookmarksData();
+                updateBookmarkBtnState();
+            }
+            updateCountsUI();
+            renderModalItems();
+        }
+
+        function clearCurrentModalList() {
+            if (activeModalType === 'history') {
+                gameState.history = [];
+                saveHistoryData();
+                updateCountsUI();
+                renderModalItems();
+            }
+        }
+
+        async function checkAndLoadSharedSeed() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const seedParam = urlParams.get('seed');
+            if (!seedParam) return false;
+
+            const decoded = decodeSeedPayload(seedParam);
+            if (!decoded) return false;
+
+            const matchedEntry = gameState.wordList.find(w => w.word.toLowerCase() === decoded.word.toLowerCase());
+            if (!matchedEntry) return false;
+
+            // Clean the seed query parameter from address bar so refresh/re-draw behaves cleanly
+            if (window.history && window.history.replaceState) {
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+
+            // Display Shared Roll Notification Badge
+            const badge = document.getElementById('shared-roll-badge');
+            document.getElementById('shared-by-user').textContent = `@${decoded.username}`;
+            document.getElementById('shared-check-code').textContent = `CODE: ${decoded.checkCode}`;
+            badge.classList.remove('hidden');
+
+            startWordRollForSpecificWord(matchedEntry);
+            return true;
+        }
+
+        async function startWordRollForSpecificWord(chosen) {
+            audioFX.init();
+            gameState.isRolling = true;
+            document.getElementById('bookmark-current-btn').classList.add('hidden');
+
+            document.getElementById('top-nav').classList.add('hidden');
+            document.getElementById('center-start-container').classList.add('hidden');
+            document.getElementById('reroll-container').classList.add('hidden');
+
+            const stage = document.getElementById('roll-stage');
+            const wordContainer = document.getElementById('animated-word-container');
+            const metaContainer = document.getElementById('word-meta-container');
+            const breakdownContainer = document.getElementById('rarity-breakdown-container');
+            const traitsList = document.getElementById('traits-list');
+            const totalScoreBox = document.getElementById('total-score-box');
+
+            stage.classList.remove('hidden');
+            metaContainer.classList.add('hidden');
+            breakdownContainer.classList.add('hidden');
+            totalScoreBox.classList.add('hidden');
+            traitsList.innerHTML = '';
+            wordContainer.innerHTML = '';
+
+            scoreAnimator.reset();
+
+            const traits = calculateWordRarityTraits(chosen.word);
+            traits.sort((a, b) => a.rarityX - b.rarityX);
+
+            let totalRarityScore = 0;
+            traits.forEach(t => totalRarityScore += t.rarityX);
+            totalRarityScore = Math.round(totalRarityScore * 10) / 10;
+
+            gameState.currentRoll = {
+                word: chosen.word,
+                definition: chosen.definition,
+                pos: chosen.pos,
+                traits: traits,
+                score: totalRarityScore
+            };
+
+            updateBookmarkBtnState();
+
+            const letters = chosen.word.split('');
+            const slotElements = [];
+
+            for (let i = 0; i < letters.length; i++) {
+                const char = letters[i];
+                const box = document.createElement('span');
+                box.className = 'slot-letter-box';
+                box.style.animationDelay = `${i * 60}ms`;
+
+                const span = document.createElement('span');
+                span.className = 'slot-letter';
+
+                if (!/[a-zA-Z]/.test(char)) {
+                    span.textContent = char;
+                    span.classList.add('revealed');
+                } else {
+                    span.textContent = '?';
+                    span.classList.add('spinning');
+                }
+
+                box.appendChild(span);
+                wordContainer.appendChild(box);
+
+                slotElements.push({ char, elem: span, isAlphabet: /[a-zA-Z]/.test(char) });
+                audioFX.playTick();
+                await new Promise(r => setTimeout(r, 45));
+            }
+
+            for (let i = 0; i < slotElements.length; i++) {
+                const slot = slotElements[i];
+                if (!slot.isAlphabet) continue;
+
+                const targetChar = slot.char;
+                const isUpper = targetChar === targetChar.toUpperCase();
+                const alphabet = "abcdefghijklmnopqrstuvwxyz";
+                let currentAlphaIdx = Math.floor(Math.random() * 26);
+                const totalSpins = 8 + (i * 4) + Math.floor(Math.random() * 3);
+
+                for (let spin = 0; spin < totalSpins; spin++) {
+                    const spinProgress = spin / (totalSpins - 1);
+                    const delay = 35 + spinProgress * 25;
+                    await new Promise(r => setTimeout(r, delay));
+
+                    currentAlphaIdx = (currentAlphaIdx + 1) % 26;
+                    let currentChar = (spin === totalSpins - 1) ? targetChar.toLowerCase() : alphabet[currentAlphaIdx];
+                    if (isUpper) currentChar = currentChar.toUpperCase();
+
+                    slot.elem.textContent = currentChar;
+                    audioFX.playTick();
+                }
+
+                slot.elem.textContent = targetChar;
+                slot.elem.classList.remove('spinning');
+                slot.elem.classList.add('revealed');
+                audioFX.playReveal();
+            }
+
+            await new Promise(r => setTimeout(r, 150));
+            document.getElementById('word-pos').textContent = chosen.pos;
+            const syls = estimateSyllables(chosen.word);
+            document.getElementById('word-syllables').textContent = `${syls} syllable${syls === 1 ? '' : 's'}`;
+            document.getElementById('word-definition').textContent = chosen.definition;
+
+            metaContainer.classList.remove('hidden');
+            metaContainer.classList.remove('slide-from-top-side');
+            void metaContainer.offsetWidth;
+            metaContainer.classList.add('slide-from-top-side');
+
+            await new Promise(r => setTimeout(r, 650));
+
+            breakdownContainer.classList.remove('hidden');
+            totalScoreBox.classList.remove('hidden');
+            document.getElementById('trait-count-badge').textContent = `${traits.length} satisfied`;
+
+            let runningTotalScore = 0;
+            let streak = 0;
+
+            for (let i = 0; i < traits.length; i++) {
+                const trait = traits[i];
+                streak++;
+                const magnitudeMultiplier = Math.max(1, Math.pow(2, Math.log10(trait.rarityX / 10)));
+                const rawDelayMs = Math.round(CONFIG.BASE_TRAIT_DELAY_MS * magnitudeMultiplier);
+                const speedupPercent = Math.min(CONFIG.MAX_STREAK_SPEEDUP_PERCENT, streak * CONFIG.STREAK_SPEEDUP_PERCENT) / 100;
+                const delayMs = Math.max(60, Math.round(rawDelayMs * (1 - speedupPercent)));
+
+                await new Promise(r => setTimeout(r, delayMs));
+
+                const traitRow = document.createElement('div');
+                traitRow.className = 'trait-row flex justify-between items-center text-slate-700 py-1 border-b border-slate-200/40 text-xs font-mono';
+                traitRow.innerHTML = `
+                    <span>${trait.name}</span>
+                    <span class="font-bold text-indigo-600 font-mono">+${trait.rarityX}</span>
+                `;
+                traitsList.appendChild(traitRow);
+                audioFX.playPop(streak);
+
+                runningTotalScore += trait.rarityX;
+                const currentRoundedScore = Math.round(runningTotalScore * 10) / 10;
+                scoreAnimator.animateTo(currentRoundedScore, Math.min(delayMs, 500));
+
+                if (traitsList.scrollHeight > traitsList.clientHeight) {
+                    traitsList.scrollTo({
+                        top: traitsList.scrollHeight - traitsList.clientHeight,
+                        behavior: 'smooth'
+                    });
+                }
+            }
+
+            await new Promise(r => setTimeout(r, 200));
+            scoreAnimator.animateTo(totalRarityScore, 400);
+
+            document.getElementById('top-nav').classList.remove('hidden');
+            await new Promise(r => setTimeout(r, 400));
+            //document.getElementById('reroll-container').classList.remove('hidden');
+
+            gameState.isRolling = false;
+            updateCooldownUI();
+        }
+
+        function toggleBookmarkCurrent() {
+            if (!gameState.currentRoll) return;
+            const item = gameState.currentRoll;
+            const idx = gameState.bookmarks.findIndex(b => b.word.toLowerCase() === item.word.toLowerCase());
+            
+            if (idx >= 0) {
+                gameState.bookmarks.splice(idx, 1);
+            } else {
+                gameState.bookmarks.unshift(item);
+            }
+            saveBookmarksData();
+            updateBookmarkBtnState();
+            updateCountsUI();
+        }
+
+        function updateBookmarkBtnState() {
+            if (!gameState.currentRoll) return;
+            const btn = document.getElementById('bookmark-current-btn');
+            const isBookmarked = gameState.bookmarks.some(b => b.word.toLowerCase() === gameState.currentRoll.word.toLowerCase());
+            btn.textContent = isBookmarked ? '✓ bookmarked' : '+ bookmark';
+        }
+
+        function updateCountsUI() {
+            document.getElementById('history-count').textContent = gameState.history.length;
+            document.getElementById('bookmarks-count').textContent = gameState.bookmarks.length;
+        }
+
+        function saveBookmarksData() {
+            try {
+                localStorage.setItem('lexica_bookmarks_v3', JSON.stringify(gameState.bookmarks));
+            } catch (e) { console.warn(e); }
+        }
+
+        function saveHistoryData() {
+            try {
+                localStorage.setItem('lexica_history_v3', JSON.stringify(gameState.history));
+            } catch (e) { console.warn(e); }
+        }
+
+        function loadStorageData() {
+            try {
+                const bms = localStorage.getItem('lexica_bookmarks_v3');
+                if (bms) gameState.bookmarks = JSON.parse(bms);
+                const hst = localStorage.getItem('lexica_history_v3');
+                if (hst) gameState.history = JSON.parse(hst);
+            } catch (e) { console.warn(e); }
+        }
+    </script>
+</body>
+</html>
