@@ -544,7 +544,7 @@
             } else if (gameState.isLoaded && !gameState.isRolling) {
                 const buttonText = gameState.currentRoll ? "ROLL AGAIN" : "ROLL WORD";
                 if (mainLabel) mainLabel.textContent = buttonText;
-                if (rerollLabel) rerollLabel.textContent = buttonText;
+                if (rerollLabel) mainLabel.textContent = buttonText;
                 if (subtext) {
                     subtext.textContent = `Indexed ${gameState.wordList.length.toLocaleString()} words · press space / click to roll`;
                     subtext.className = "text-[11px] text-emerald-600 font-mono tracking-wide";
@@ -1496,6 +1496,7 @@ const tier = getRarityTier(rollData.score);
             gameState.isRolling = true;
 
             document.getElementById('top-nav').classList.add('hidden');
+            document.getElementById('shared-roll-badge').classList.add('hidden');
             document.getElementById('center-start-container').classList.add('hidden');
             document.getElementById('reroll-container').classList.add('hidden');
             
@@ -1739,6 +1740,10 @@ const tier = getRarityTier(rollData.score);
 
         function openShareModal() {
             if (!gameState.currentRoll) return;
+            if (gameState.currentRoll.isShared) {
+                alert("You can only share rolls you've discovered yourself.");
+                return;
+            }
             const modal = document.getElementById('share-modal');
             const input = document.getElementById('share-username-input');
             const statusMsg = document.getElementById('copy-status-msg');
@@ -2032,10 +2037,11 @@ const tier = getRarityTier(rollData.score);
                 definition: chosen.definition,
                 pos: chosen.pos,
                 traits: traits,
-                score: totalRarityScore
+                score: totalRarityScore,
+                isShared: true
             };
 
-            saveLastRollData();
+            // Shared rolls are NOT saved as the user's own last roll
             updateBookmarkBtnState();
 
             const letters = chosen.word.split('');
