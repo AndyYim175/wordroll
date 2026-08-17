@@ -403,16 +403,16 @@
                 </div>
             </div>
 
-            <div class="space-y-2 pt-1">
-                <label class="block text-slate-600 font-semibold">Generated Seed Link:</label>
-                <div class="flex gap-2">
-                    <input id="share-link-output" readonly type="text" class="flex-1 px-3 py-2 bg-slate-100 border border-slate-200 rounded-md text-slate-600 text-[11px] font-mono overflow-x-auto">
-                    <button id="copy-link-btn" onclick="copyGeneratedShareLink()" class="interactive-btn px-4 py-2 bg-indigo-600 text-white font-semibold rounded-md hover:bg-indigo-700 transition-colors">
+            <div class="space-y-2">
+                <div class="flex items-center justify-between">
+                    <label class="block text-slate-600 font-semibold">Shareable Summary:</label>
+                    <button id="copy-link-btn" onclick="copyGeneratedShareLink()" class="interactive-btn px-3 py-1 bg-indigo-600 text-white text-[11px] font-semibold rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                         Copy
                     </button>
                 </div>
+                <textarea id="share-summary-output" readonly rows="8" class="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-md text-slate-700 text-[11px] font-mono resize-none focus:outline-none focus:border-indigo-500"></textarea>
                 <div id="copy-status-msg" class="text-[11px] text-emerald-600 hidden">
-                    ✓ Link copied to clipboard!
+                    ✓ Summary copied to clipboard!
                 </div>
             </div>
         </div>
@@ -544,7 +544,7 @@
             } else if (gameState.isLoaded && !gameState.isRolling) {
                 const buttonText = gameState.currentRoll ? "ROLL AGAIN" : "ROLL WORD";
                 if (mainLabel) mainLabel.textContent = buttonText;
-                if (rerollLabel) mainLabel.textContent = buttonText;
+                if (rerollLabel) rerollLabel.textContent = buttonText;
                 if (subtext) {
                     subtext.textContent = `Indexed ${gameState.wordList.length.toLocaleString()} words · press space / click to roll`;
                     subtext.className = "text-[11px] text-emerald-600 font-mono tracking-wide";
@@ -1496,7 +1496,6 @@ const tier = getRarityTier(rollData.score);
             gameState.isRolling = true;
 
             document.getElementById('top-nav').classList.add('hidden');
-            document.getElementById('shared-roll-badge').classList.add('hidden');
             document.getElementById('center-start-container').classList.add('hidden');
             document.getElementById('reroll-container').classList.add('hidden');
             
@@ -1738,12 +1737,34 @@ const tier = getRarityTier(rollData.score);
             return /^[a-zA-Z0-9_-]+$/.test(name);
         }
 
+        function generateShareSummaryText(link) {
+            if (!gameState.currentRoll) return '';
+            const roll = gameState.currentRoll;
+            const tier = getRarityTier(roll.score);
+            const lines = [];
+            lines.push(`I rolled ${roll.word} in WordRoll!`);
+            lines.push(`${tier.name} (1 in ${roll.score.toLocaleString()})`);
+            lines.push('----------')
+            const sortedTraits = [...roll.traits].sort((a, b) => b.rarityX - a.rarityX);
+            const topTraits = sortedTraits.slice(0, 5);
+            topTraits.forEach(t => {
+                lines.push(`${t.name} +${t.rarityX}`);
+            });
+
+            const remaining = sortedTraits.length - topTraits.length;
+            if (remaining > 0) {
+                lines.push(`(+${remaining} more)`);
+            }
+
+            if (link) {
+                lines.push(link);
+            }
+
+            return lines.join('\n');
+        }
+
         function openShareModal() {
             if (!gameState.currentRoll) return;
-            if (gameState.currentRoll.isShared) {
-                alert("You can only share rolls you've discovered yourself.");
-                return;
-            }
             const modal = document.getElementById('share-modal');
             const input = document.getElementById('share-username-input');
             const statusMsg = document.getElementById('copy-status-msg');
@@ -1767,14 +1788,14 @@ const tier = getRarityTier(rollData.score);
         function updateShareLinkOutput() {
             const input = document.getElementById('share-username-input');
             const err = document.getElementById('username-error');
-            const linkInput = document.getElementById('share-link-output');
+            const summaryInput = document.getElementById('share-summary-output');
             const copyBtn = document.getElementById('copy-link-btn');
 
             const val = input.value.trim();
 
             if (val.length === 0 || !isValidUsername(val)) {
                 err.classList.remove('hidden');
-                linkInput.value = '';
+                summaryInput.value = '';
                 copyBtn.disabled = true;
                 copyBtn.classList.add('opacity-50');
                 return;
@@ -1788,18 +1809,26 @@ const tier = getRarityTier(rollData.score);
 
             const seed = encodeSeedPayload(gameState.currentRoll.word, val);
             const baseUrl = window.location.origin + window.location.pathname;
-            linkInput.value = `${baseUrl}?seed=${seed}`;
+            const link = `${baseUrl}?seed=${seed}`;
+            summaryInput.value = generateShareSummaryText(link);
         }
 
         function copyGeneratedShareLink() {
-            const linkInput = document.getElementById('share-link-output');
-            if (!linkInput.value) return;
+            const summaryText = document.getElementById('share-summary-output').value;
+            if (!summaryText) return;
 
-            linkInput.select();
-            document.execCommand('copy');
+            navigator.clipboard.writeText(summaryText).then(() => {
+                const statusMsg = document.getElementById('copy-status-msg');
+                statusMsg.classList.remove('hidden');
+            }).catch(() => {
+                // Fallback for older browsers
+                const summaryInput = document.getElementById('share-summary-output');
+                summaryInput.select();
+                document.execCommand('copy');
 
-            const statusMsg = document.getElementById('copy-status-msg');
-            statusMsg.classList.remove('hidden');
+                const statusMsg = document.getElementById('copy-status-msg');
+                statusMsg.classList.remove('hidden');
+            });
         }
 
         function openModal(type) {
@@ -2037,11 +2066,10 @@ const tier = getRarityTier(rollData.score);
                 definition: chosen.definition,
                 pos: chosen.pos,
                 traits: traits,
-                score: totalRarityScore,
-                isShared: true
+                score: totalRarityScore
             };
 
-            // Shared rolls are NOT saved as the user's own last roll
+            saveLastRollData();
             updateBookmarkBtnState();
 
             const letters = chosen.word.split('');
