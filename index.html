@@ -253,10 +253,21 @@
                     <button id="reroll-btn" onclick="startWordRoll()" class="interactive-btn py-3 px-6 border border-slate-300 hover:border-indigo-500 rounded-md text-slate-800 font-semibold text-xs md:text-sm bg-white/60 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                         <span id="reroll-btn-label">ROLL AGAIN</span>
                     </button>
-                    <button onclick="openShareModal()" class="interactive-btn py-3 px-5 border border-indigo-200 hover:border-indigo-500 rounded-md text-indigo-600 font-semibold text-xs md:text-sm bg-indigo-50/60 shadow-sm transition-all flex items-center gap-1.5">
+                    <button id="share-roll-btn" onclick="openShareModal()" class="interactive-btn py-3 px-5 border border-indigo-200 hover:border-indigo-500 rounded-md text-indigo-600 font-semibold text-xs md:text-sm bg-indigo-50/60 shadow-sm transition-all flex items-center gap-1.5">
                         <span>🔗</span> SHARE ROLL
                     </button>
                 </div>
+
+                <!-- Shared-roll denial message -->
+                <div id="shared-denial-msg" class="hidden text-[11px] text-rose-500 font-mono text-center max-w-xs">
+                    Shared rolls can't be re-rolled or claimed.
+                </div>
+
+                <!-- Back to user's own rolls -->
+                <button id="shared-back-btn" onclick="returnFromSharedMode()" class="hidden interactive-btn py-3 px-6 border border-slate-300 hover:border-indigo-500 rounded-md text-slate-800 font-semibold text-xs md:text-sm bg-white/60 shadow-sm transition-all">
+                    ← BACK TO MY ROLLS
+                </button>
+
                 <div id="reroll-subtext" class="text-[11px] text-slate-400 font-mono text-center">
                     <!-- Dynamic energy subtext -->
                 </div>
@@ -403,16 +414,16 @@
                 </div>
             </div>
 
-            <div class="space-y-2">
-                <div class="flex items-center justify-between">
-                    <label class="block text-slate-600 font-semibold">Shareable Summary:</label>
-                    <button id="copy-link-btn" onclick="copyGeneratedShareLink()" class="interactive-btn px-3 py-1 bg-indigo-600 text-white text-[11px] font-semibold rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+            <div class="space-y-2 pt-1">
+                <label class="block text-slate-600 font-semibold">Generated Seed Link:</label>
+                <div class="flex gap-2">
+                    <input id="share-link-output" readonly type="text" class="flex-1 px-3 py-2 bg-slate-100 border border-slate-200 rounded-md text-slate-600 text-[11px] font-mono overflow-x-auto">
+                    <button id="copy-link-btn" onclick="copyGeneratedShareLink()" class="interactive-btn px-4 py-2 bg-indigo-600 text-white font-semibold rounded-md hover:bg-indigo-700 transition-colors">
                         Copy
                     </button>
                 </div>
-                <textarea id="share-summary-output" readonly rows="8" class="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-md text-slate-700 text-[11px] font-mono resize-none focus:outline-none focus:border-indigo-500"></textarea>
                 <div id="copy-status-msg" class="text-[11px] text-emerald-600 hidden">
-                    ✓ Summary copied to clipboard!
+                    ✓ Link copied to clipboard!
                 </div>
             </div>
         </div>
@@ -1046,6 +1057,7 @@
             wordRankMap: new Map(),
             isLoaded: false,
             isRolling: false,
+            isSharedRoll: false,
             currentMode: 'pull',
             bookmarks: [],
             history: [],
@@ -1195,7 +1207,7 @@
             startEnergyTicker();
 
             window.addEventListener('keydown', (e) => {
-                if (e.code === 'Space' && gameState.currentMode === 'pull' && gameState.isLoaded && !gameState.isRolling) {
+                if (e.code === 'Space' && gameState.currentMode === 'pull' && gameState.isLoaded && !gameState.isRolling && !gameState.isSharedRoll) {
                     if (document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'BUTTON') {
                         e.preventDefault();
                         if (energyState.count > 0) {
@@ -1333,6 +1345,68 @@
             }
         }
 
+        function setActionButtonsMode(mode) {
+            const rerollContainer = document.getElementById('reroll-container');
+            const rerollBtn = document.getElementById('reroll-btn');
+            const shareBtn = document.getElementById('share-roll-btn');
+            const denialMsg = document.getElementById('shared-denial-msg');
+            const backBtn = document.getElementById('shared-back-btn');
+            const rerollSubtext = document.getElementById('reroll-subtext');
+
+            if (!rerollContainer) return;
+
+            if (mode === 'shared') {
+                rerollContainer.classList.remove('hidden');
+                rerollBtn.classList.add('hidden');
+                shareBtn.classList.add('hidden');
+                rerollSubtext.classList.add('hidden');
+                denialMsg.classList.remove('hidden');
+                backBtn.classList.remove('hidden');
+            } else {
+                rerollBtn.classList.remove('hidden');
+                shareBtn.classList.remove('hidden');
+                rerollSubtext.classList.remove('hidden');
+                denialMsg.classList.add('hidden');
+                backBtn.classList.add('hidden');
+            }
+        }
+
+        function flashSharedDenial() {
+            const denial = document.getElementById('shared-denial-msg');
+            if (!denial) return;
+            denial.classList.remove('hidden');
+            denial.classList.add('animate-pulse');
+            setTimeout(() => denial.classList.remove('animate-pulse'), 600);
+        }
+
+        function returnFromSharedMode() {
+            gameState.isSharedRoll = false;
+
+            document.getElementById('shared-roll-badge').classList.add('hidden');
+            setActionButtonsMode('normal');
+
+            let ownRoll = null;
+            try {
+                const saved = localStorage.getItem('lexica_last_roll_v4');
+                if (saved) ownRoll = JSON.parse(saved);
+            } catch (e) {
+                console.warn(e);
+            }
+
+            gameState.currentRoll = ownRoll;
+
+            if (ownRoll) {
+                renderRollStatically(ownRoll);
+            } else {
+                document.getElementById('roll-stage').classList.add('hidden');
+                document.getElementById('center-start-container').classList.remove('hidden');
+                document.getElementById('reroll-container').classList.add('hidden');
+                document.getElementById('top-nav').classList.remove('hidden');
+                document.getElementById('top-left-energy').classList.remove('hidden');
+                updateEnergyUI();
+            }
+        }
+
         function renderRollStatically(rollData) {
             document.getElementById('center-start-container').classList.add('hidden');
             
@@ -1391,92 +1465,101 @@
             if (tierSubtext) {
                 tierSubtext.innerHTML = `<span class="${tier.colorClass}">${tier.name}</span>`;
             }
+
+            setActionButtonsMode('normal');
         }
         
         async function renderLastRollWithLetterPop(rollData) {
-    document.getElementById('center-start-container').classList.add('hidden');
+            document.getElementById('center-start-container').classList.add('hidden');
 
-    const stage = document.getElementById('roll-stage');
-    const wordContainer = document.getElementById('animated-word-container');
-    const metaContainer = document.getElementById('word-meta-container');
-    const breakdownContainer = document.getElementById('rarity-breakdown-container');
-    const traitsList = document.getElementById('traits-list');
-    const totalScoreBox = document.getElementById('total-score-box');
-    const rerollContainer = document.getElementById('reroll-container');
+            const stage = document.getElementById('roll-stage');
+            const wordContainer = document.getElementById('animated-word-container');
+            const metaContainer = document.getElementById('word-meta-container');
+            const breakdownContainer = document.getElementById('rarity-breakdown-container');
+            const traitsList = document.getElementById('traits-list');
+            const totalScoreBox = document.getElementById('total-score-box');
+            const rerollContainer = document.getElementById('reroll-container');
 
-    stage.classList.remove('hidden');
-    metaContainer.classList.add('hidden');
-    breakdownContainer.classList.add('hidden');
-    totalScoreBox.classList.add('hidden');
-    rerollContainer.classList.add('hidden');
-    traitsList.innerHTML = '';
-    wordContainer.innerHTML = '';
+            stage.classList.remove('hidden');
+            metaContainer.classList.add('hidden');
+            breakdownContainer.classList.add('hidden');
+            totalScoreBox.classList.add('hidden');
+            rerollContainer.classList.add('hidden');
+            traitsList.innerHTML = '';
+            wordContainer.innerHTML = '';
 
-    const letters = rollData.word.split('');
-    const letterCount = letters.length;
+            const letters = rollData.word.split('');
+            const letterCount = letters.length;
 
-    letters.forEach((char, i) => {
-        const box = document.createElement('span');
-        box.className = 'slot-letter-box';
-        box.style.animationDelay = `${i * 60}ms`;
+            letters.forEach((char, i) => {
+                const box = document.createElement('span');
+                box.className = 'slot-letter-box';
+                box.style.animationDelay = `${i * 60}ms`;
 
-        const span = document.createElement('span');
-        span.className = 'slot-letter revealed';
-        span.textContent = char;
+                const span = document.createElement('span');
+                span.className = 'slot-letter revealed';
+                span.textContent = char;
 
-        box.appendChild(span);
-        wordContainer.appendChild(box);
-    });
+                box.appendChild(span);
+                wordContainer.appendChild(box);
+            });
 
-    // Wait for the last letter to finish popping up
-    const lastLetterFinish = (letterCount - 1) * 60 + 400;
-    await new Promise(r => setTimeout(r, lastLetterFinish));
+            // Wait for the last letter to finish popping up
+            const lastLetterFinish = (letterCount - 1) * 60 + 400;
+            await new Promise(r => setTimeout(r, lastLetterFinish));
 
-    // Show definition/meta with the slide-from-top animation
-    document.getElementById('word-pos').textContent = rollData.pos;
-    const syls = estimateSyllables(rollData.word);
-    document.getElementById('word-syllables').textContent = `${syls} syllable${syls === 1 ? '' : 's'}`;
-    document.getElementById('word-definition').textContent = rollData.definition;
-    updateBookmarkBtnState();
+            // Show definition/meta with the slide-from-top animation
+            document.getElementById('word-pos').textContent = rollData.pos;
+            const syls = estimateSyllables(rollData.word);
+            document.getElementById('word-syllables').textContent = `${syls} syllable${syls === 1 ? '' : 's'}`;
+            document.getElementById('word-definition').textContent = rollData.definition;
+            updateBookmarkBtnState();
 
-    metaContainer.classList.remove('hidden');
-    metaContainer.classList.remove('slide-from-top-side');
-    void metaContainer.offsetWidth;
-    metaContainer.classList.add('slide-from-top-side');
+            metaContainer.classList.remove('hidden');
+            metaContainer.classList.remove('slide-from-top-side');
+            void metaContainer.offsetWidth;
+            metaContainer.classList.add('slide-from-top-side');
 
-    await new Promise(r => setTimeout(r, 600));
+            await new Promise(r => setTimeout(r, 600));
 
-    // Show traits and score
-    breakdownContainer.classList.remove('hidden');
-    totalScoreBox.classList.remove('hidden');
+            // Show traits and score
+            breakdownContainer.classList.remove('hidden');
+            totalScoreBox.classList.remove('hidden');
 
-    rollData.traits.forEach((trait, i) => {
-        const traitRow = document.createElement('div');
-        traitRow.className = 'trait-row flex justify-between items-center text-slate-700 py-1 border-b border-slate-200/40 text-xs font-mono';
-        traitRow.style.animationDelay = `${i * 80}ms`;
-        traitRow.innerHTML = `
-            <span>${trait.name}</span>
-            <span class="font-bold text-indigo-600 font-mono">+${trait.rarityX}</span>
-        `;
-        traitsList.appendChild(traitRow);
-    });
+            rollData.traits.forEach((trait, i) => {
+                const traitRow = document.createElement('div');
+                traitRow.className = 'trait-row flex justify-between items-center text-slate-700 py-1 border-b border-slate-200/40 text-xs font-mono';
+                traitRow.style.animationDelay = `${i * 80}ms`;
+                traitRow.innerHTML = `
+                    <span>${trait.name}</span>
+                    <span class="font-bold text-indigo-600 font-mono">+${trait.rarityX}</span>
+                `;
+                traitsList.appendChild(traitRow);
+            });
 
-    const finalScoreEl = document.getElementById('word-final-score');
-    if (finalScoreEl) finalScoreEl.textContent = rollData.score.toLocaleString();
+            const finalScoreEl = document.getElementById('word-final-score');
+            if (finalScoreEl) finalScoreEl.textContent = rollData.score.toLocaleString();
 
+            const tier = getRarityTier(rollData.score);
+            const tierSubtext = document.getElementById('rarity-tier-subtext');
+            if (tierSubtext) {
+                tierSubtext.innerHTML = `<span class="${tier.colorClass}">${tier.name}</span>`;
+            }
 
-const tier = getRarityTier(rollData.score);
-    const tierSubtext = document.getElementById('rarity-tier-subtext');
-    if (tierSubtext) {
-        tierSubtext.innerHTML = `<span class="${tier.colorClass}">${tier.name}</span>`;
-    }
+            await new Promise(r => setTimeout(r, rollData.traits.length * 80 + 300));
 
-    await new Promise(r => setTimeout(r, rollData.traits.length * 80 + 300));
+            // Finally reveal the Roll Again button
+            rerollContainer.classList.remove('hidden');
+            setActionButtonsMode('normal');
+        }
 
-    // Finally reveal the Roll Again button
-    rerollContainer.classList.remove('hidden');
-}
         async function startWordRoll() {
+            if (gameState.isSharedRoll) {
+                setActionButtonsMode('shared');
+                flashSharedDenial();
+                return;
+            }
+
             if (!gameState.isLoaded || gameState.isRolling || gameState.wordList.length === 0) return;
 
             if (energyState.count <= 0) {
@@ -1676,12 +1759,10 @@ const tier = getRarityTier(rollData.score);
                 document.getElementById('rarity-tier-subtext').innerHTML = `<span class="${tier.colorClass}">${tier.name}</span>`;
             });
 
-            
-
             document.getElementById('top-left-energy').classList.remove('hidden');
             document.getElementById('top-nav').classList.remove('hidden');
             await new Promise(r => setTimeout(r, 400));
-            document.getElementById('reroll-container').classList.remove('hidden');
+            setActionButtonsMode('normal');
 
             gameState.isRolling = false;
             updateEnergyUI();
@@ -1737,33 +1818,13 @@ const tier = getRarityTier(rollData.score);
             return /^[a-zA-Z0-9_-]+$/.test(name);
         }
 
-        function generateShareSummaryText(link) {
-            if (!gameState.currentRoll) return '';
-            const roll = gameState.currentRoll;
-            const tier = getRarityTier(roll.score);
-            const lines = [];
-            lines.push(`I rolled ${roll.word} in WordRoll!`);
-            lines.push(`${tier.name} (1 in ${roll.score.toLocaleString()})`);
-            lines.push('----------')
-            const sortedTraits = [...roll.traits].sort((a, b) => b.rarityX - a.rarityX);
-            const topTraits = sortedTraits.slice(0, 5);
-            topTraits.forEach(t => {
-                lines.push(`${t.name} +${t.rarityX}`);
-            });
-
-            const remaining = sortedTraits.length - topTraits.length;
-            if (remaining > 0) {
-                lines.push(`(+${remaining} more)`);
-            }
-
-            if (link) {
-                lines.push(link);
-            }
-
-            return lines.join('\n');
-        }
-
         function openShareModal() {
+            if (gameState.isSharedRoll) {
+                setActionButtonsMode('shared');
+                flashSharedDenial();
+                return;
+            }
+
             if (!gameState.currentRoll) return;
             const modal = document.getElementById('share-modal');
             const input = document.getElementById('share-username-input');
@@ -1788,14 +1849,14 @@ const tier = getRarityTier(rollData.score);
         function updateShareLinkOutput() {
             const input = document.getElementById('share-username-input');
             const err = document.getElementById('username-error');
-            const summaryInput = document.getElementById('share-summary-output');
+            const linkInput = document.getElementById('share-link-output');
             const copyBtn = document.getElementById('copy-link-btn');
 
             const val = input.value.trim();
 
             if (val.length === 0 || !isValidUsername(val)) {
                 err.classList.remove('hidden');
-                summaryInput.value = '';
+                linkInput.value = '';
                 copyBtn.disabled = true;
                 copyBtn.classList.add('opacity-50');
                 return;
@@ -1809,26 +1870,18 @@ const tier = getRarityTier(rollData.score);
 
             const seed = encodeSeedPayload(gameState.currentRoll.word, val);
             const baseUrl = window.location.origin + window.location.pathname;
-            const link = `${baseUrl}?seed=${seed}`;
-            summaryInput.value = generateShareSummaryText(link);
+            linkInput.value = `${baseUrl}?seed=${seed}`;
         }
 
         function copyGeneratedShareLink() {
-            const summaryText = document.getElementById('share-summary-output').value;
-            if (!summaryText) return;
+            const linkInput = document.getElementById('share-link-output');
+            if (!linkInput.value) return;
 
-            navigator.clipboard.writeText(summaryText).then(() => {
-                const statusMsg = document.getElementById('copy-status-msg');
-                statusMsg.classList.remove('hidden');
-            }).catch(() => {
-                // Fallback for older browsers
-                const summaryInput = document.getElementById('share-summary-output');
-                summaryInput.select();
-                document.execCommand('copy');
+            linkInput.select();
+            document.execCommand('copy');
 
-                const statusMsg = document.getElementById('copy-status-msg');
-                statusMsg.classList.remove('hidden');
-            });
+            const statusMsg = document.getElementById('copy-status-msg');
+            statusMsg.classList.remove('hidden');
         }
 
         function openModal(type) {
@@ -2016,6 +2069,8 @@ const tier = getRarityTier(rollData.score);
                 };
             }
 
+            gameState.isSharedRoll = true;
+
             if (window.history && window.history.replaceState) {
                 window.history.replaceState({}, document.title, window.location.pathname);
             }
@@ -2032,6 +2087,7 @@ const tier = getRarityTier(rollData.score);
         async function startWordRollForSpecificWord(chosen) {
             audioFX.init();
             gameState.isRolling = true;
+            gameState.isSharedRoll = true;
             document.getElementById('top-left-energy').classList.add('hidden');
 
             document.getElementById('top-nav').classList.add('hidden');
@@ -2069,7 +2125,9 @@ const tier = getRarityTier(rollData.score);
                 score: totalRarityScore
             };
 
-            saveLastRollData();
+            if (!gameState.isSharedRoll) {
+                saveLastRollData();
+            }
             updateBookmarkBtnState();
 
             const letters = chosen.word.split('');
@@ -2197,7 +2255,7 @@ const tier = getRarityTier(rollData.score);
             document.getElementById('top-left-energy').classList.remove('hidden');
             document.getElementById('top-nav').classList.remove('hidden');
             await new Promise(r => setTimeout(r, 400));
-            document.getElementById('reroll-container').classList.remove('hidden');
+            setActionButtonsMode('shared');
 
             gameState.isRolling = false;
             updateEnergyUI();
